@@ -145,6 +145,19 @@ table(s)
  # 1/x = Linverse de x  ()
  # !x = Le complémentaire de x  (logique)"
 
+# Vous créez un nouveau répertoire de stockage des modules par défaut (solution intelligente).
+# Voici comment le signifier à R  :
+#   1. Créez un nouveau dossier à la racine de votre ordinateur ( ://C ou ://D) que vous pouvez
+# appeler “Bibliothèque R” et copiez son chemin absolu (par exemple : “ ://C/Bibliothèque
+#                                                       R”)
+# 2. Dans Panneau de configuration > Système et sécurité > Système > Paramètres système
+# avancés > Variable d’environnement, cliquez sur “Nouvelle... ” qui se trouve dans l’onglet
+# Variable système, entrez comme nom : “R_LIBS” et comme valeur : le chemin de votre
+# dossier.
+# 3. Redémarrez RStudio. Dorénavant, lorsque vous installerez des nouveaux modules, ils seront stockés dans ce dossier quelle que soit votre version de R. Vous n’y penserez même
+# plus !
+  
+
 # CREE UN PROJET R dans un répertoire de travail ####
 
 # touche en haut à gauche, (petit carré bleu avec R dedans) 
@@ -189,11 +202,21 @@ table(s)
 
 # pour connaitre cheminement des fichier faire :  getwd()
 
-# pour ouvrir une zone script sur R Markdown : Ctrl + Alt + i
+
 
 # pour convertir un fichier HTML R Markdown en PDF : open in browser / Clic droit / imprimer / imprimante/ Enregistrer en format pdf
 
 # Conseil Rmarkdown ####
+
+# pour ouvrir une zone script sur R Markdown : Ctrl + Alt + i
+
+# pour le mode ouvrage :
+
+# - le script markdown "index" doit toujours s'appeler index, il est le script qui regroupe tous les paramétrages effectués sur l'ouvrage
+
+# pour pouvoir utiliser le "build" (en haut à droite avec "environment" et "Git" par exemple) qui permet de mettre en forme l'ouvrage il faut creer un projet R avec uniquement des Rmarkdown
+
+# l
 
 ## a) conseils ####
 
@@ -247,41 +270,51 @@ table(s)
 
 
 
-## b) Info instalation ####
 
-# - pour installer des packages depuis GitHub, inutile d'avoir un compte ou
-# d'installer git. Il suffit d'exécuter
-# remotes::install_github("Compte/Depot") dans R. Par exemple, pour
+
+## b) EcoFoG ####
+
 # installer le package EcoFoG: remotes::install_github("EcoFoG/EcoFoG")
-# 
-# - pour utiliser GitHub en tant que développeur, il faut :
-#     * ouvrir un compte sur GitHub
-#     * installer git sur son ordinateur
-# Ensuite, pour créer un projet, la méthode la plus simple :
-#     * sur GitHub, créer un dépôt vide
-# (https://ericmarcon.github.io/travailleR/chap-git.html#cr%C3%A9er-un-nouve
-# au-d%C3%A9p%C3%B4t , section 3.2.4) et sur RStudio créer un projet à
-# partir de ce dépôt. Les modifications locales seront remontées surGitHub
-# (https://ericmarcon.github.io/travailleR/chap-git.html#usage-courant)
-#     * Séparément, créer un nouveau document Markdown selon un modèle
-# EcoFoG
-# (https://ericmarcon.github.io/travailleR/chap-rediger.html#memo-article-bo
-# okdown) dans un dossier vide. Commence par un Memo (section 4.3.1) à titre
+
+# # File/New Files/Rmarkdown/From template/Memo EcoFoG ou aller voir sur  :
+#
+# (https://ericmarcon.github.io/travailleR/chap-rediger.html#memo-article-bookdown) 
+
+# dans un dossier vide. Commence par un Memo (section 4.3.1) à titre
 # d'exercice. Déplacer les fichiers dans le dossier du projet synchronisé
-# avec GitHub et le tour est joué : il reste à rédiger, tricoter (section 4.3.1), prendre en compte les modifications (commit) et pousser (section 3.3).
+# avec GitHub et le tour est joué : il reste à rédiger
 # 
 # 
-# Essaie de créer un premier projet de mémo et le rendre lisible sur GitHub
-# à la façon de https://github.com/EricMarcon/Inference-bayesienne 
+## c) Git Hub ####
 
-## c) Mon code ####
-
-library(EcoFoG)
-library(bookdown)
+  # - pour utiliser GitHub en tant que développeur, il faut :
+  #     * ouvrir un compte sur GitHub
+  #     * installer git sur son ordinateur
+  # Ensuite, pour créer un projet, la méthode la plus simple :
 
 # https://ericmarcon.github.io/travailleR/chap-git.html#cr%C3%A9er-un-nouve%20#%20au-d%C3%A9p%C3%B4t%20,%20section%203.2.4
 
-# rendu à la section 5
+# pour push sur Github 
 
-#https://github.com/Edouard-sorin/Analyse_Spectro_R.git
+# git remote add origin https://github.com/Edouard-sorin/Analyse_Spectro_R.git
+# 
+# git branch -M master
+# 
+# git push -u origin master
+
+# pas de modif sur github que sur Rstudio  ! 
+
+
+
+# Depuis Gitignore on peut signifier a git ce qu'on ne veut pas rendre sous cette notation :  Documents/
+
+
+
+
+# Essaie de créer un premier projet de mémo et le rendre lisible sur GitHub
+# à la façon de https://github.com/EricMarcon/Inference-bayesienne 
+
+# Pour ne pas avoir de fichier "unstaged" dans la fenetre git en haut à droite il  faut ouvrir .gitignore dans les dossier ou se trouve le projet R et noté tel quel le nom des dossier de la fenetre git avec / à la fin
+
+
 
