@@ -1,0 +1,869 @@
+---
+title: "Diagnostiquer les arbres atteints du HLB par Spectroscopie Proche Infra-Rouge (SPIR)" 
+subtitle: "Evaluation du potentiel de cette méthode"  
+author: "Nathan CREQUY"
+date: "06/04/2020"
+output: bookdown::html_document2
+
+---
+<img src="../Donnees/logo cirad.jpg" style="position:absolute;top:0px;right:0px;" width="200px"  />
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message= FALSE, echo = FALSE)
+
+## Chargement des packages:
+
+
+library(ggplot2)
+library(cowplot)
+library(gridExtra)
+library(ggdark)
+library(esquisse)
+library(colourpicker)
+library(readxl)
+library(imager)  
+library(data.table)
+library(plyr)
+library(tidyr)
+library(tidyverse)  
+library(caret)      
+library(pls)     
+library(caTools) 
+library(reshape2)
+library(e1071) # SVM
+library(gt) 
+library(ROCR)
+library(MASS)
+library(mda)
+library(klaR)
+library(dplyr)
+library(rminer)
+library(party)  # Random Forest
+library(plsdepot) # Partial Least Square
+
+
+# Importation des donnees data_SPIR_Ed ####
+
+data_SPIR_Ed <- read.table(file = "C:/Users/esori/Desktop/Stage La reunion/R/Analyse_Spectro_R/Donnees/Donnees_Nathan/SPIRjuin_ED.csv"
+                      
+                      , header = T
+                      , sep = ";"
+                      , stringsAsFactors = T
+                      , row.names = 1
+                      , na.strings = c("","NA")
+                      , dec = "," )
+
+
+# data_SPIR_Ed
+
+data_SPIR_Ed$X <- rownames(data_SPIR_Ed)
+for (i in 1:nrow(data_SPIR_Ed )) {
+  code_labo <- data_SPIR_Ed$X[i]                   # X devient temporairement code_labo
+  code_ech <- str_replace(code_labo, "NG", "N")
+  code_ech <- str_replace(code_labo, "HB", "P")
+  data_SPIR_Ed$hyp_HLB[i] <- substr(code_ech, 1, 1)
+  data_SPIR_Ed$HLB[i] <- substr(code_labo, 3, 3)
+  data_SPIR_Ed$rep_arbre[i] <- (as.numeric(substr(code_labo, 3, 4)))
+  data_SPIR_Ed$hyp_arbre[i] <- substr(code_labo, 4, 4)
+  data_SPIR_Ed$rep_lot[i] <- (as.numeric(substr(code_labo, 5, 5)))
+  data_SPIR_Ed$hyp_feuille[i] <- substr(code_labo, 10, 10)
+  data_SPIR_Ed$rep_feuille[i] <- floor( (as.numeric(substr(code_labo, 8, 10))) /10) 
+}
+data_SPIR_Ed$X <-NULL
+data_SPIR_Ed$HLB <- (as.numeric(mapvalues(data_SPIR_Ed$HLB, from=c(1, 2), to=c(1,0))))
+
+# disponible pour le passage en format long jusqu'ici  !!! 
+
+data_SPIR_Ed$code_ech_arbre <- factor(paste(data_SPIR_Ed$hyp_HLB, data_SPIR_Ed$hyp_arbre, sep=""))
+
+
+data_SPIR_Ed$code_ech_lot <- factor(paste(data_SPIR_Ed$hyp_HLB, data_SPIR_Ed$hyp_arbre, data_SPIR_Ed$rep_lot, sep=""))
+
+data_SPIR_Ed$code_ech_feuille <- factor(paste(data_SPIR_Ed$hyp_HLB, data_SPIR_Ed$hyp_arbre, data_SPIR_Ed$rep_lot, data_SPIR_Ed$hyp_feuille ,sep=""))
+
+data_SPIR_Ed <- data_SPIR_Ed[,c(-(which(colnames(data_SPIR_Ed) == "hyp_HLB")),-(which(colnames(data_SPIR_Ed) == "hyp_arbre")),-(which(colnames(data_SPIR_Ed) == "hyp_feuille")))]
+
+# disponible pour combiner avec les resultats Qpcr !
+
+
+# Importation et preparation des resultat de la Qpcr ####
+
+data_Qpcr_Ed <- read.table(file = "C:/Users/esori/Desktop/Stage La reunion/R/Analyse_Spectro_R/Donnees/Donnees_Nathan/results_qPCR.csv"
+                           
+                           , header = T
+                           , sep = ";"
+                           , stringsAsFactors = T
+                           , row.names = 1
+                           , na.strings = c("","NA"))
+data_Qpcr_Ed
+
+trueP <- list(levels(factor(data_Qpcr_Ed$Sample.Name[which(data_Qpcr_Ed$C..Mean <32)])), levels(factor(data_Qpcr_Ed$Sample.Name[which(data_Qpcr_Ed$C..Mean <36)])) ) # on stocke les noms d'échantillons positifs selon nos 2 seuils de Ct
+
+arbres <- list(c(), c() )
+
+for (a in 1:length(arbres)) {
+  for (i in 1:length(trueP[[a]])) {  arbres[[a]] <- append(arbres[[a]], substr(trueP[[a]][i], 1,2))}
+  arbres[[a]] <- unique(arbres[[a]])
+}
+trueP[[3]] <- arbres[[1]]
+trueP[[4]] <- arbres[[2]]
+remove(arbres)
+names(trueP) <- c("ech_ct<32_lot","ech_ct<36_lot", "ech_ct<32_arbre","ech_ct<36_arbre" )
+
+
+testHLB <- list(data.frame(hyp_HLB= rep(c(rep("N",3), rep("P", 3)), 7), rep_arbre= rep(1:7, each=6), rep_lot= rep(1:3, times=14), qPCR_HLB= NA))
+testHLB[[1]]$code_ech_lot <- paste(testHLB[[1]]$hyp_HLB, testHLB[[1]]$rep_arbre, testHLB[[1]]$rep_lot, sep="")
+testHLB[[2]] <- testHLB[[1]]
+testHLB[[3]] <- testHLB[[1]]
+testHLB[[4]] <- testHLB[[1]]
+names(testHLB) <- names(trueP)
+
+for (l in 1:2) { #on applique la boucle à chaque élément "lot" de testHLB, soit on détermine les posi selon nos deux seuils de Ct
+  for (i in 1:nrow(testHLB[[l]])) {
+    if ( testHLB[[l]]$code_ech_lot[i] %in%  trueP[[l]]){ 
+      testHLB[[l]]$qPCR_HLB[i] <- 1}
+    else { testHLB[[l]]$qPCR_HLB[i] <- 0}
+  }
+  testHLB[[l]] <- lapply(testHLB[[l]], factor)
+  testHLB[[l]] <- as.data.frame(testHLB[[l]])
+}
+
+
+
+for (l in 3:4) { #on applique la boucle à chaque élément de "arbre" testHLB , soit on détermine les posi selon nos deux seuils de Ct
+  for (i in 1:nrow(testHLB[[l]])) {
+    if ( substr(testHLB[[l]]$code_ech_lot[i], 1, 2) %in%  trueP[[l]]){ 
+      testHLB[[l]]$qPCR_HLB[i] <- 1}
+    else { testHLB[[l]]$qPCR_HLB[i] <- 0}
+  }
+  testHLB[[l]] <- lapply(testHLB[[l]], factor)
+  testHLB[[l]] <- as.data.frame(testHLB[[l]])
+}
+
+# on obtient testHLB avec les positions des éléments positifs ou négatif au HLB
+
+
+for (i in 1:length(testHLB)) { #on joint le résultat du test HLB au jdd de data_SPIR_Ed (on a 4 colonnes de test HLB: voir leurs noms)
+  
+# !!!! Code_ech différent...Ecrire data_SPIR_ed avec code_ech de la Qpcr
+  
+  data_SPIR_Ed <- merge(data_SPIR_Ed, testHLB[[i]][4:5], by= "code_ech_lot", all.y= F, suffixes = c("", names(testHLB)[i]) )
+}
+
+data_SPIR_Ed <- data_SPIR_Ed[,c(1,2154:2163,3:2153)]
+data_SPIR_Ed <- data_SPIR_Ed[,c(7,1,6,3:5,8:2162)]
+
+# Il faut changer les noms car les signes ">" ne sont pas compris
+
+names(data_SPIR_Ed )[match("qPCR_HLB",names(data_SPIR_Ed ))] <- "qPCR_HLBech_ct32_lot"
+
+names(data_SPIR_Ed )[match("qPCR_HLBech_ct<36_lot",names(data_SPIR_Ed ))] <- "qPCR_HLBech_ct36_lot"
+
+names(data_SPIR_Ed )[match("qPCR_HLBech_ct<32_arbre",names(data_SPIR_Ed ))] <- "qPCR_HLBech_ct32_arbre"
+
+names(data_SPIR_Ed )[match("qPCR_HLBech_ct<36_arbre",names(data_SPIR_Ed ))] <- "qPCR_HLBech_ct36_arbre"
+
+```
+
+
+# Rappel du protocole expérimental
+Objectif de l’expérimentation : L’objectif de l'expérience est de déterminer si, dans le contexte réunionnais, il est possible de distinguer les arbres sains des arbres malades à partir de leur signature lumineuse. 
+
+L’expérience vise à différencier des arbres répartis selon deux modalités (sain ou malade). En raison de l'interdiction des sorties terrain liée à l'épidémie de Covid-19, 2 arbres par modalité sur les 7 prévus dans le protocole intial ont été échantillonés. Les arbres appartiennent à la même espèce, *Citrus sinensis* var. Washington Navel. Le choix des arbres malades et sains s'est fait sur les conseils de l'exploitant et sur leurs traits phénotypiques. **Leur statut reste donc à confirmer par PCR.**  
+Sur chaque arbre nous avons prélevé 30 feuilles de manière aléatoire, en prenant soin de prendre des feuilles d’âges différents sur des rameaux symptomatiques et non symptomatiques. Leurs statuts "flush/non flush" (les feuilles en flush sont jeunes et fines) et "présence/ absence de chlorose" ont été notés. La présence de chancre citrique a également été appréciée grâce à une échelle de notation. Au sein de chaque répétition, les échantillons ont subi exactement le même traitement (température et délai entre le prélèvement et la mesure de SPIR).  
+Dix mesures de spectrométrie ont été effectuées sur chaque feuille, 5 au niveau de la nervure principale et 5 sur le limbe. 
+Après les mesures de spectrométrie, les feuilles ont été regroupées par dix (il y a donc 3 lots de 10 feuilles par arbre) et stockées à -30°C dans l'attente de détecter la maladie par méthode moléculaire (qPCR Li et al. 2006, 3 détections par arbre).
+
+
+
+# Signature spectrale de la maladie
+  La SPIR est une technique d'analyse basée sur le principe d'absorption des rayonnements infra-rouge par la matière organique. Lorsqu'un rayonnement rencontre la matière, un transfert d'énergie peut avoir lieu à condition que l'énergie qu'il transporte (dépendant de sa longeur d'onde) soit égale à la différence d'énergie potentielle entre deux niveaux d'énergie d'excitation d'un atome ou d'une molécule. La quantité d'énergie absorbée par l'échantillon dépend donc de sa composition chimique. La mesure de l'intensité énergétique transmise I après traversée de l'échantillon permet de calculer une valeur d'absorbance à chaque longueur d'onde (l'absorbance correspond au logarithme décimal du rapport entre l'intensité énergétique I0 à une longueur d'onde donnée, avant traversée du milieu, et l'intensité énergétique transmise I).   
+  Les mesures de SPIR ont été effectuées en "transflectance": les échantillons sont disposés sur une surface d'absorbance nulle (Spectralon®) et les rayonnements réfléchis et transmis sont analysés (voir Figure \@ref(fig:methodespir) b) ).
+  
+```{r methodespir, echo=FALSE, , fig.cap="Méthodes de mesures en SPIR"}
+mesures <- load.image("D:/HLB stage/Documents/mesuresspir.png")
+plot(mesures, axes= FALSE)
+
+```
+
+```{r spectres, include =FALSE, message=FALSE}
+#### On visualise le spectre moyen en fonction de HLB + ou - :
+nega <- c()
+posi <- c()
+lambda <- c()
+for (i in (7:ncol(spir)) ) {
+  calcul <- aggregate( formula= spir[,i] ~ spir$HLB, data= spir , FUN = mean)
+  nega <- append( nega, calcul[1,2] )
+  posi <- append( posi, calcul[2,2] )
+  lambda <- append( lambda, as.numeric(sub(".*X", "", colnames(spir)[i] )) )}
+  
+
+spectra_N <- data.frame(lambda, HLB=factor("N"), Tr= nega)
+spectra_P <- data.frame(lambda, HLB=factor("P"), Tr= posi)
+  
+mean_spectra_N_P <- rbind.data.frame(spectra_N, spectra_P)
+
+  
+graph1 <- ggplot(mean_spectra_N_P, aes(x= lambda, y=Tr, color=HLB)) + 
+  geom_point(size=1) +
+  scale_color_manual( values = c("#00CD00", "#CD3333"), labels=c("Négatif", "Positif"))+
+  labs(title = "Spectre moyen en fonction du statut HLB +/- des arbres (hypothèse)",x="Longeur d'onde (en nm)", y="Absorbance", color= "Résultat du test HLB (hypothèse)" ) +
+  scale_x_continuous(breaks = seq(350, 2500, by=100))+
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1, size= 7.5), panel.background = element_blank())
+# ggsave("spectreNP.png" , plot=graph1)
+
+#### On visualise le spectre moyen pour chaque arbre testé:
+meanspectrabytree <- function(x){
+  N1 <- c()
+  N2 <- c()
+  P1 <- c()
+  P2 <- c()
+  lambda <- c()
+  for (i in (which(colnames(x)=="X350"):ncol(x)) ) {
+    calcul <- aggregate( formula= x[,i] ~ x$rep_arbre + x$HLB, data= x , FUN = mean)
+    N1 <- append( N1, calcul[1,3] )
+    N2 <- append( N2, calcul[2,3] )
+    P1 <- append( P1, calcul[3,3] )
+    P2 <- append( P2, calcul[4,3] )
+    lambda <- append( lambda, as.numeric(sub(".*X", "", colnames(x)[i] )) )}
+  
+  spectra_N1 <- data.frame(lambda, HLB=factor("N1"), Tr= N1)
+  spectra_N2 <- data.frame(lambda, HLB=factor("N2"), Tr= N2)
+  spectra_P1 <- data.frame(lambda, HLB=factor("P1"), Tr= P1)
+  spectra_P2 <- data.frame(lambda, HLB=factor("P2"), Tr= P2)
+  
+  mean_spectra_each_tree <- rbind.data.frame(spectra_N1,spectra_N2, spectra_P1, spectra_P2)
+  return(mean_spectra_each_tree)
+}
+
+mean_spectra_each_tree <- meanspectrabytree(spir)
+
+## zoom sur la zone 500-700 nm:
+graph2 <- ggplot(mean_spectra_each_tree, aes(x= lambda, y=Tr, color=HLB)) + 
+  scale_x_continuous(limits = c(400,700), breaks = seq(400, 700, by=50)) +
+  scale_y_continuous(limits=c(NA, 0.15))+
+  scale_color_manual( values = c("#00CD00", "#008B00", "#FF4040", "#CD3333"), labels= paste(rep(c("Négatif", "Positif"), each=2), rep(c(" répétition 1", "répétition 2"), times=2)))+
+  geom_point(size=1) +
+  labs(title = "Spectre IR moyen de chaque arbre testé",x="Longeur d'onde (en nm)", y="Absorbance", color= "Résultat du test HLB (hypothèse)" ) +
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1), panel.background = element_blank())
+# ggsave("spectre_chaque_arbre_400.png", plot=graph2)
+
+graph3 <- ggplot(mean_spectra_each_tree, aes(x= lambda, y=Tr, color=HLB)) + 
+  scale_x_continuous(limits = c(700,1000), breaks = seq(700, 1000, by=50)) +
+  scale_color_manual( values = c("#00CD00", "#008B00", "#FF4040", "#CD3333"), labels= paste(rep(c("Négatif", "Positif"), each=2), rep(c(" répétition 1", "répétition 2"), times=2)))+
+  geom_point(size=1) +
+  labs(title = "Spectre IR moyen de chaque arbre testé",x="Longeur d'onde (en nm)", y="Absorbance", color= "Résultat du test HLB (hypothèse)" ) +
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1), panel.background = element_blank())
+# ggsave("spectre_chaque_arbre_700.png", plot=graph3)
+
+#### On visualise le spectre en fonction de la variable chlorose
+test_chlo_pste <- cbind( meanspectrabytree( subset(test, test$chlorose==1) ), chlorose=factor(1))
+test_chlo_abs <- cbind( meanspectrabytree( subset(test, test$chlorose==0) ), chlorose= factor(0))
+mean_spectra_tree_chlorose <- rbind(test_chlo_abs, test_chlo_pste)
+
+library(ggplot2)
+chlorose_names<- list('0'="Absence de chlorose",  '1'="Chlorose")
+chlorose_labeller <- function(variable,value){
+  return(chlorose_names[value])
+}
+ 
+graph4 <- ggplot(mean_spectra_tree_chlorose) +
+ aes(x = lambda, y = Tr, colour = HLB) +
+ scale_color_manual( values = c("#00CD00", "#008B00", "#FF4040", "#CD3333"), labels= paste(rep(c("Négatif", "Positif"), each=2), rep(c(" répétition 1", "répétition 2"), times=2)))+
+ geom_point(size = 1L) +
+ facet_wrap(vars(chlorose), labeller=chlorose_labeller)+
+ labs(title = "Spectre IR moyen de chaque arbre testé",x="Longeur d'onde (en nm)", y="Absorbance", color= "Résultat du test HLB (hypothèse)" ) +
+theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1), panel.background = element_blank(), strip.background = element_rect(
+  color="black", fill="#C1FFC1", size=1.5, linetype="solid"
+))
+# ggsave("spectre_chlorose.png", plot=graph4)
+
+#### On visualise le spectre en fonction de la variable flush:
+test_flush <- cbind( meanspectrabytree( subset(test, test$flush==1) ), flush=factor(1))
+test_noflush <- cbind( meanspectrabytree( subset(test, test$flush==0) ), flush= factor(0))
+mean_spectra_tree_flush <- rbind(test_flush, test_noflush)
+
+library(ggplot2)
+flush_names<- list('0'="Absence de flush",  '1'="Feuille en flush")
+flush_labeller <- function(variable,value){
+  return(flush_names[value])
+}
+
+graph5 <- ggplot(mean_spectra_tree_flush) +
+  aes(x = lambda, y = Tr, colour = HLB) +
+  scale_color_manual( values = c("#00CD00", "#008B00", "#FF4040", "#CD3333"), labels= paste(rep(c("Négatif", "Positif"), each=2), rep(c(" répétition 1", "répétition 2"), times=2)))+
+  geom_point(size = 1L) +
+  facet_wrap(vars(flush), labeller=flush_labeller)+
+  labs(title = "Spectre IR moyen de chaque arbre testé",x="Longeur d'onde (en nm)", y="Absorbance", color= "Résultat du test HLB (hypothèse)" ) +
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1, size= 0.8), panel.background = element_blank(), strip.background = element_rect(
+    color="black", fill="#C1FFC1", size=1.5, linetype="solid"
+  ))
+# ggsave("spectre_flush.png", plot=graph5)
+
+
+```
+
+Les spectres présentent une certaines variabilité intermodalité à certaines longueurs d'onde, notemment entre 450 et 650 nm (voir Figure \@ref(fig:zoomquatre)), ce qui laisse penser qu'on pourrait identifier le statut infecté des arbres à partir de leur spectre. Ces observations sont en accord avec les résultats de l'étude de Deng et al. 2019 selon lequel les individus HLB positifs présentent une plus grande absorbance à ces longueurs d'onde. Cependant, entre 700 et 1000 nm (voir Figure \@ref(fig:zoomsept)), ce sont les individus HLB positifs qui ont la plus grande absorbance, ce qui correspond à l'inverse des observations faites par cette même étude. 
+Conernant les feuilles présentant des chloroses, on note qu'elles ont une plus grande variabilité intra-modalité (voir Figure \@ref(fig:chloroses)). Même constat pour les feuilles en absence de flush (voir Figure \@ref(fig:flush)), mais il est difficile de tirer des conclusions car ce sont également celles qui présentent le plus de chloroses. 
+
+
+```{r graphesspectres, echo= FALSE, message= FALSE , fig.cap=" Spectre moyen en fonction du statut HLB +/- des arbres"}
+plot(graph1) #spectre HLB +/-
+
+```
+```{r zoomquatre, echo= FALSE,  message= FALSE, fig.cap=" Spectre moyen par arbre échantilloné, zoom fenêtre 450-650 nm"}
+plot(graph2)
+```
+```{r zoomsept, echo= FALSE,  message= FALSE, fig.cap=" Spectre moyen par arbre échantilloné, soom fenêtre 750-1000 nm"}
+plot(graph3)
+```
+```{r chloroses, echo= FALSE,  message= FALSE, fig.cap="Spectre moyen par arbre échantilloné en présence ou absence de chlorose"}
+plot(graph4)
+```
+```{r flush, echo= FALSE, message= FALSE , fig.cap="Spectre moyen par arbre échantilloné en présence ou absence de feuilles en flush"}
+plot(graph5)
+```
+
+
+```{r graphes_sd, include= FALSE }
+#### On visualise le sd en fonction de HLB + ou - :
+nega <- c()
+posi <- c()
+lambda <- c()
+for (i in (7:ncol(spir)) ) {
+  calcul <- aggregate( formula= spir[,i] ~ spir$HLB, data= spir , FUN = sd)
+  nega <- append( nega, calcul[1,2] )
+  posi <- append( posi, calcul[2,2] )
+  lambda <- append( lambda, as.numeric(sub(".*X", "", colnames(spir)[i] )) )}
+  
+
+sd_spectra_N <- data.frame(lambda, HLB=factor("N"), Tr= nega)
+sd_spectra_P <- data.frame(lambda, HLB=factor("P"), Tr= posi)
+  
+sd_spectra_N_P <- rbind.data.frame(sd_spectra_N, sd_spectra_P)
+
+  
+graphsd <- ggplot(sd_spectra_N_P, aes(x= lambda, y=Tr, color=HLB)) + 
+  geom_point(size=1) +
+  scale_color_manual( values = c("#00CD00", "#CD3333"), labels=c("Négatif", "Positif"))+
+  labs(title = "Ecart-type de la Absorbance intra-modalité (HLB +/-) \n en fonction de la longueur d'onde",x="Longeur d'onde (en nm)", y="Ecart-type", color= "Résultat du test HLB (hypothèse)" ) +
+  scale_x_continuous(breaks = seq(350, 2500, by=100))+
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1), panel.background = element_blank())
+```
+
+
+## Analyse statistique: peut-on prédire le statut HLB +/- des arbres à partir de leur signature spectrale
+
+### Partial Least Squares Regression (PLS)
+Le jeu de données présente 2150 variables associées à chaque longueur d'onde et 1191 observations. On cherche donc à réduire ce nombre important de variables explicatives. 
+En réalisant une Partial Least Squares Regression (PLS), on identifie des combinaisons linéaires des variables explicatives qui résument au mieux le jeu de données tout en étant liées à la variable à expliquer (ici le statut HLB+/- des arbres). Ces combinaisons linéaires sont réalisées sur plusieurs dimensions orthogonales deux à deux (Principal Components ou PCs).
+
+```{r ML_datawrangling, include= FALSE}
+# Chargement des packages:
+# install.packages("tidyr")
+# install.packages("plyr")
+# install.packages("pls")
+# install.packages('caTools') 
+#install.packages("e1071")
+# install.packages("caret")
+
+library("e1071") 
+library(plyr)
+library(tidyr)
+library(tidyverse)
+library(caret)
+library(pls)
+library(caTools) 
+
+spir <- spir[,-c(5,6)]
+spir$HLB <- mapvalues(spir$HLB, from=c("N", "P"), to=c(0,1))
+
+```
+
+
+```{r pls, include = TRUE, echo = TRUE, fig.cap="Précision du modèle en fonction du nombre de dimensions utilisées"}
+# On divise le jeu de données en 2 sous-jeux servant à l'apprentissage (training_set) \n et à la validation du modèle (test_set):
+set.seed(123) 
+split = sample.split(spir$HLB, SplitRatio = 0.75) 
+
+training_set <- subset(spir, split == TRUE) 
+test_set <- subset(spir, split == FALSE) 
+training_set[c(5:2155)] <- scale(training_set[c(5:2155)] ) #centrage et réduction des données
+test_set[c(5:2155)] <- scale(test_set[c(5:2155)] ) 
+
+# On construit un modèle PLS en réalisant des Cross-Validation (on construit le modèle sur 90% des lignes du jeu de données tirées aléatoirement et on répète cette opération 10 fois)
+
+model <- train( x=training_set[5:2155], y=training_set$HLB, # on note que le modèle n'est construit que sur le training_set afin de vérifier qu'il n'y a pas de sur-apprentissage du modèle lorsque l'on prédit par la suite sur le test_set. 
+  method = "pls",
+  scale = TRUE,
+  trControl = trainControl("repeatedcv", number = 10, repeats = 10),
+  tuneLength = 10
+)
+
+# Erreur de cross-validation RMSE en fonction de différents nombres de PCs:
+plot(model)
+# Nombre de Pcs qui minimise l'erreur de cross-validation RMSE:
+model$bestTune
+
+
+# Prédisons maintenant le statut HLB+/- grâce au modèle PLS (on utilise le test_set, sous-jeu de données qui n'a jamais servi à l'apprentissage du modèle):
+predictions <- model %>% predict(test_set)
+predictions <- as.numeric(predictions)
+
+# performance de prédiction du modèle:
+data.frame(
+  RMSE = caret::RMSE(predictions, as.numeric(test_set$HLB)),
+  Rsquare = caret::R2(predictions, as.numeric(test_set$HLB))
+)
+model$results
+```
+
+Ainsi, la prédiction du statut infecté des arbres est optimisé en utilisant 9 PCs (voir Figure \@ref(fig:pls)), la fiabilité de la prédiction est alors de 85%.
+
+
+### Support Vector Machine (SVM)
+Les SVM sont des algorithmes de clasification binaire par apprentissage supervisé. Ils présentent l'avantage de limiter les risques d'overfitting en estimant leur complexité au cours de la phase d'apprentissage. Un SVM recherche un classificateur ou hyperplan qui sépare les données en maximisant la distance entre les deux classes de points. On cherche ici à prédire le statut HLB +/- des arbres en fonction des valeurs d'absorbance à chaque longueur d'onde.   Une transformation non linaire des données par différents *kernels* peut être utilisée.   
+
+#### Kernel linéaire
+```{r svm, include=TRUE, echo=TRUE}
+
+## On construit le modèle sur le training set:
+classifier = svm(y = training_set$HLB , x=training_set[5:2155], 
+                  
+                 type = 'C-classification', 
+                 kernel = 'linear') 
+
+## Et on le fait prédire sur le test_set:
+y_pred = predict(classifier, newdata = test_set[c(5:2155)]) 
+
+
+## On construit la matrice de confusion associée à cette prédiction:
+cm = table(test_set$HLB, y_pred) 
+confusionMatrix(test_set$HLB, y_pred)
+
+## On vérifie qu'il n'y a pas de surapprentissage du modèle en réalisant une prédiction sur le training_set:
+y_pred_OF = predict(classifier, newdata = training_set[c(5:2155)]) 
+cmOF = table(training_set$HLB, y_pred_OF)
+cmOF #la prédiction n'est pas meilleure donc il n'y a pas de problème de surapprentissage
+
+## K-Folds Cross-Validation: 
+# On sépare aléatoirement le training_set en 10 sous-jeu de données (ou folds), et on construit le modèle sur chacun d'eux
+folds = createFolds(training_set$HLB, k = 10)
+
+## La fonction cv applique une fonction à chaque sous-jeud de données ou fold
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_set[-x, ] 
+  test_fold = training_set[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[5:2155],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[5:2155])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+
+#on calcule la précision moyenne du modèle sur nos 10 folds:
+accuracy = mean(as.numeric(cv))
+accuracy
+
+#On a une meilleure accuracy avec 10 folds: SUPER!!!
+
+
+```
+L'algorithme SVM avec une frontière de type linéaire permet une prédiction du statut infecté des arbres avec une précision de l'ordre de 90%. La méthode de Cross-Validation permet une amélioration de la prédiction tout en évitant des risques de surapprentissage du modèle, la fiabilité avec 10 folds atteint `r round(100*(accuracy), digits=2)`%. 
+
+#### Autres types de kernel 
+```{r autreskernels, include= FALSE}
+## kernel polynomial avec plusieurs degrés i:
+accuracy <- c()
+for (i in 2:6) {
+  print(i)
+  classifier_poly = svm(y = training_set$HLB , x=training_set[5:2155], 
+                  
+                 type = 'C-classification', 
+                 kernel = 'polynomial',
+                 degree= i) 
+  ## Et on le fait prédire sur le test_set:
+  y_pred_poly = predict(classifier_poly, newdata = test_set[c(5:2155)]) 
+
+
+  ## On construit la matrice de confusion associée à cette prédiction:
+  cm = table(test_set$HLB, y_pred_poly) 
+  toto <- confusionMatrix(test_set$HLB, y_pred_poly)
+  accuracy <- append(accuracy, toto$overall[1])
+
+}
+accu <- data.frame(degre=c(2:6), accuracy)
+accupoly <- ggplot(accu) +
+ aes(x = degre, y = accuracy) +
+ geom_line(size = 1L, colour = "#0c4c8a") +
+  labs(title = "Précision de la prédiction par le modèle SVM \n en fonction du degré polynomial du kernel utilisé",x="Degré polynomial du kernel", y="Accuracy") +
+  theme(axis.line = element_line(colour = "black"), panel.background = element_blank())
+
+
+## kernel sigmoid: très mauvaise prédiction
+ classifier_sin = svm(y = training_set$HLB , x=training_set[5:2155], 
+                  
+                 type = 'C-classification', 
+                 kernel = 'sigmoid') 
+  ## Et on le fait prédire sur le test_set:
+  y_pred_sin = predict(classifier_sin, newdata = test_set[c(5:2155)]) 
+
+
+  ## On construit la matrice de confusion associée à cette prédiction:
+  cm = table(test_set$HLB, y_pred_sin) 
+  accusin <- confusionMatrix(test_set$HLB, y_pred_sin)$overall[1]
+
+
+```
+```{r graphpoly, echo= FALSE, fig.cap="Précision du modèle en fonction du degré du polynome utilisé comme kernel"}
+plot(accupoly)
+```
+
+
+L'exploration d'autres types de frontières ou kernel dans le SVM ne s'avère pas concluante. L'utilisation d'un kernel de type "polynôme" conduit à une moins bonne prédiction du statut infecté des arbres par rapport à un kernel linéaire, et ce quelque soit le degré du polynôme utilisé (voir Figure \@ref(fig:autreskernels )). On notera que la prédiction la plus juste est obtenue avec un polynôme de degré 3, elle est alors de `r round(100*max(accu$accuracy), digits=2)` %. On note également une baisse puis une remontée de l'accuracy avec des polynomes de degrés 4 et 5 respectivement, ce qui est caractéristique d'un phénomène d'overfitting du modèle. 
+Concernant le kernel de type sigmoide, il ne permet pas une bonne prédiction, elle est seulement de `r round(100*accusin, digits=2)` %.
+
+
+### Identification de longueurs d'ondes caractéristiques de la signature spectrale du HLB
+
+```{r lambdaHLB, include= FALSE}
+# install.packages("plsRglm")
+# install.packages("plsdof")
+# install.packages("features")
+library("plsRglm")
+library("plsdof")  
+library("features")
+training_set2 <- training_set
+test_set2 <- test_set
+training_set2$HLB <- as.numeric(as.character(training_set$HLB))
+test_set2$HLB <- as.numeric(as.character(test_set2$HLB))
+plsbis <- plsR(dataY= training_set2$HLB, dataX=training_set2[5:2155],dataPredictY = test_set2[5:2155], nt=9, modele="pls")
+
+coeffvar <- data.frame(Coeff=plsbis$Coeffs, lambda= seq(from=349, to= 2500, by=1))
+
+
+graphscoeff <- ggplot(coeffvar[2:2152,], aes(x= lambda, y=Coeff)) + 
+  geom_point(size=0.5) +
+  labs(title = "Coefficient de la regression linéaire pour chaque variable",x="Longeur d'onde (en nm)", y="Coefficient de corrélation" ) +
+  scale_x_continuous(breaks = seq(350, 2500, by=100))+
+  theme(axis.line = element_line(colour = "black"), axis.text.x = element_text(angle = 30, vjust = 1, hjust=1), panel.background = element_blank())
+
+
+
+library(ggpmisc)
+library (quantmod)
+
+# on cherche les pics des coeff de la régression de la PLS pour réaliser une svm dessus
+#au total, on sélectionne 236 longueurs d'onde et le svm prédit le statut avec 90% d'acccurracy.
+
+lambdamax <- findPeaks(coeffvar[2:2152,]$Coeff)+ 6 # indices des colonnes correspondantes dans spir
+spirmax <- spir[, c(1,lambdamax)] #6 correspond aux colonnes avant les var lambda, on les enlève
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracy = mean(as.numeric(cv))
+
+# on vérifie qu'il n'y ait pas d'overfitting en prédisant sur le jdd qui a servi à l'apprentissage du modèle, soit le training-fold, l'accuracy n'est pas meilleure donc ok. 
+
+
+
+## Trouvons les lambda qui expliquent le mieux le statut, c.a.d. les pics sur la courbe coeffvar$coeff~ lambda:
+y.smooth <- loess(coeffvar$Coeff ~ coeffvar$lambda, span=0.05)$fitted
+# plot(coeffvar$lambda, y.smooth, type = 'l')
+library(zoo)
+w=30
+y.max <- rollapply(zoo(y.smooth), 2*w+1, max, align="center")
+x.max <- rollapply(zoo(coeffvar$lambda), 2*w+1, median, align="center")
+# plot(x.max, y.max, col = 'Gray', type='l')
+# lines(x.max, y.max, col = 'SkyBlue', lwd = 2)
+
+# plot(coeffvar$lambda, coeffvar$Coeff, col = 'Gray', type = 'l')
+# lines(coeffvar$lambda, y.smooth, col = 'Black')
+# lines(x.max, y.max, col = 'SkyBlue', lwd = 2)
+
+n <- length(coeffvar$Coeff)
+delta <- y.max - y.smooth[-c(1:w, n+1-1:w)]
+# plot(x.max, delta, type='l')
+# abline(h = 0, lty='dotted', col = 'red')
+
+x <- coeffvar$lambda
+y <- coeffvar$Coeff
+argmax <- function(x, y, w=1, ...) {
+  require(zoo)
+  n <- length(y)
+  y.smooth <- loess(y ~ x, ...)$fitted
+  y.max <- rollapply(zoo(y.smooth), 2*w+1, max, align="center")
+  delta <- y.max - y.smooth[-c(1:w, n+1-1:w)]
+  i.max <- which(delta <= 0) + w
+  list(x=x[i.max], i=i.max, y.hat=y.smooth)
+}
+
+testfunc <- function(w, span) {
+  LO <- c()
+  peaks <- argmax(x, y, w=w, span=span)
+  plot(x, y, ylim= c(-0.05, 0.05), cex=0.75, col="Gray", main=paste("w = ", w, ", span = ", span, sep=""), xlab= "Longueur d'onde (en nm)", ylab= "Coefficient")
+  lines(x, peaks$y.hat,  lwd=2) #$
+  y.min <- min(y)
+  sapply(peaks$i, function(i) lines(c(x[i],x[i]), c(y.min, peaks$y.hat[i]), col="Red", lty=2))
+  points(x[peaks$i], peaks$y.hat[peaks$i], col="Red", pch=19, cex=1.25)
+  LO <- append(LO, x[peaks$i])
+}
+
+LOmax <- testfunc(50,0.05) # au final ce sont ces réglages de w et span qui fonctionnent bien...
+
+
+
+#Tentons de faire une SVM avec les longueurs d'onde sélectionnées:
+spirmax <- spir[, c(1,LOmax-349+6)] #6 correspond aux colonnes avant les var lambda, on les enlève, -349 permet de transformer la valeur de la LO en indice de colonne
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracy20 = mean(as.numeric(cv))
+
+
+
+```
+
+  On cherche désormais à identifier les longueurs d'onde qui caractérisent le plus le statut infecté des arbres. On réalise une PLS sur le jeu de données afin d'extraire les coefficients de régression linéaire entre les variables explicatives (différentes longueurs d'onde) et la variable à expliquer (statut HLB +/-). On utilise les coefficients de la première dimension (PC) , tout en soulignant que ce sont les même que ceux sur les autres dimensions à un facteur près. On identifie ensuite les maxima de la courbe f(lambda)=Coeff (voir Figure \@ref(fig:graphlast)). On trouve `r length(LOmax)` pics aux longueurs d'onde suivantes: `r LOmax` nm. 
+  On notera que ces longueurs d'onde ne correspondent pas tout à fait à celles utilisées par la caméra hyperspectrale HiPhen, à savoir des bandes de 10 nm centrées autour de 450/530/570/675/710/730/750/850 nm. 
+  On réalise ensuite une prédiction du statut par SVM en utilisant seulement les 12 longueurs d'onde sélectionnées. On arrive à une accuracy de `r round(100*accuracy20, digits=2)`% seulement.
+
+```{r graphlast, echo=FALSE, fig.cap=" Coefficient de la régression PLS pour chaque longueur d'onde (variables explicatives)"}
+testfunc(50,0.05)
+```
+ 
+```{r bandes spectrales, include=FALSE}
+## on s'intéresse désormais à des bandes spectrales de fenêtre variable, prioritairement 10 nm car c'est la fenêtre utilisée dans HiPhen:
+# prédisons avec les bandes spectrales de HiPhen:
+HiPhen <- c(450,530,570,675,710,730,750,850)
+g <- c()
+for (i in 1:length(HiPhen)) {
+  g <- append(g, seq(from=HiPhen[i]-5, to= HiPhen[i]+4 , by=1))
+}
+HiPhen <- g
+
+#Tentons de faire une SVM avec les longueurs d'onde sélectionnées:
+spirmax <- spir[, c(1,HiPhen-349+6)] #6 correspond aux colonnes avant les var lambda, on les enlève, -349 permet de transformer la valeur de la LO en indice de colonne
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracyHiPhen = mean(as.numeric(cv))
+
+###----------------------
+### et avec des bandes dde 10 nm autour de nos longueurs d'onde sélectionnées??
+g <- c()
+for (i in 1:length(LOmax)) {
+  g <- append(g, seq(from=LOmax[i]-5, to= LOmax[i]+4 , by=1))
+}
+LOmaxbande <- g
+#Tentons de faire une SVM avec les longueurs d'onde sélectionnées:
+spirmax <- spir[, c(1,LOmaxbande-349+6)] #6 correspond aux colonnes avant les var lambda, on les enlève, -349 permet de transformer la valeur de la LO en indice de colonne
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracyLOmaxbande = mean(as.numeric(cv))
+
+```
+En n'utilisant que les longueurs d'onde implémentées dans la caméra HiPhen, soit des bandes de 10nm centrées autour des valeurs suivantes: 450/530/570/675/710/730/750/850 nm, on obtient une prédiction avec une accuracy de `r round(100*accuracyHiPhen, digits=2)`%. 
+L'utilisation de bandes de 10 nm centrées autour des 12 longeurs d'onde que l'on a sélectionnées par PLS permet une meilleure prédiction, l'accuracy est de `r round(100*accuracyLOmaxbande, digits=2)`%. 
+
+
+### Prédiction du statut grâce aux variables phénotypiques et aux longueurs d'onde
+```{r varpheno, include=FALSE}
+spirmax <- test[, c(1,5:7,10:2160)] 
+spirmax$chlorose <- as.numeric(as.character(spirmax$chlorose))
+spirmax$chancre <- as.numeric(as.character(spirmax$chancre))
+spirmax$flush <- as.numeric(as.character(spirmax$flush))
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracypheno = mean(as.numeric(cv))
+
+#######pheno seulement
+spirmax <- test[, c(1,5:7)] 
+spirmax$chlorose <- as.numeric(as.character(spirmax$chlorose))
+spirmax$chancre <- as.numeric(as.character(spirmax$chancre))
+spirmax$flush <- as.numeric(as.character(spirmax$flush))
+set.seed(123) 
+splitmax = sample.split(spirmax$HLB, SplitRatio = 0.75) 
+
+training_setmax <- subset(spirmax, splitmax == TRUE) 
+test_setmax <- subset(spirmax, splitmax == FALSE) 
+
+training_setmax[,-1] <- scale(training_setmax[, -1] ) #centrage et réduction des données
+test_setmax[, -1] <- scale(test_setmax[, -1] ) 
+
+
+folds = createFolds(training_setmax$HLB, k = 10)
+cv = lapply(folds, function(x) { # début de la function
+  # le training_set est séparé en 10 grâce au lapply
+  training_fold = training_setmax[-x, ] 
+  test_fold = training_setmax[x, ] 
+  # On fait apprendre le modèle sur chaque training_FOLD, le modèle est stocké dans classifier 
+  classifier = svm(y = training_fold$HLB, x = training_fold[, -1],
+                   data = training_fold,
+                   type = 'C-classification',
+                   kernel = 'linear')
+  
+  # Désormais on prédit grâce au modèle classifier le statut HLB en utilisant le test_FOLD et on calcule la précision du modèle
+  y_pred = predict(classifier, newdata = test_fold[, -1])
+  cm = table(test_fold$HLB, y_pred)
+  accuracy = (cm[1,1] + cm[2,2]) / (cm[1,1] + cm[2,2] + cm[1,2] + cm[2,1])
+  return(accuracy)
+})
+accuracyphenoseul = mean(as.numeric(cv))
+```
+
+La prédiction du statut infecté des arbres en combinant variables phénotypiques et longueurs d'onde est très prometteuse, on arrive à une accuracy de `r round(100*accuracypheno, digits=2)`% en utilisant un modèle SVM avec un kernel linéaire et une K-fold Cross Validation avec 10 répétitions. 
+On vérifie que les observations phénotypiques ne permettent pas à elles seules de prédire le statut des arbres en réalisant un SVM avec ces variables, l'accuracy de la prédiction est de `r round(100*accuracyphenoseul, digits=2)`%. L'utilisation des données spectrales est donc entièrement justifiée. 
+
+# Conclusion
+La Spectroscopie Proche infra-Rouge semble être une méthode très prometteuse pour détecter les arbres infectés par le HLB. Cette maladie présente une signature spectrale caractéristique. Les données spectrales combinées à des observations phénotypiques (présence de chloroses, feuilles en flush, présence de chancre citrique) permettent une prédiction très fiable du statut des arbres par des algorithmes de machine learning, comme le SVM par exemple, avec une fiabilité de la prédiction qui atteint les `r round(100*accuracypheno, digits=2)`%. 
+
+Cependant, il faut rappeler que le statut HLB+/- des arbres n'est qu'encore qu'une hypothèse, leur confirmation par PCR est donc une priorité. Ces données ont été établies avec 2 arbres par modalité HLB+/- soit 4 arbres au total, il serait donc intéressant d'augmenter le nombre d'arbre par modalité HLB+/- afin d'obtenir des résultats plus robustes. La détermination de la taille de l'échantillon par un calcul de puissance est envisagée.  
+
+
+&nbsp;
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
