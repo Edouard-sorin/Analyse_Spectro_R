@@ -1,5 +1,7 @@
 rm(list=ls())  # nettoyage des listes de l'environnement de travail
 
+T1 <- Sys.time()
+
 # Library ####
 
 
@@ -46,7 +48,7 @@ test_ed <- test_ed[-(which(colnames(test_ed) == "qPCR_32"))]
 
 test_ed[[paste0("qPCR_", seuil.ct)]] <- as.numeric(as.character(test_ed[[paste0("qPCR_", seuil.ct)]] ))
 
-decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.5) # on decoupe le jeu de donné en training set et test set
+decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.75) # on decoupe le jeu de donné en training set et test set
 train_pls <- test_ed[decoup,]
 test_pls <- test_ed[!decoup,] 
 
@@ -88,6 +90,8 @@ pls_pred <- pls_pred[,c(names(pls_pred)[-select.lambda], names(pls_pred)[select.
 
 pls_pred_arbres_36 = aggregate(pls_pred_36 ~ code_ech_arbre, data = pls_pred, mean, na.rm = T)
 
+pls_pred_arbres_36$pls_pred_36[pls_pred_arbres_36$pls_pred_36 < 0] = 0   # Pour enlever les valeurs négatives
+
 # Critere choisi sur les observations graphiques
 
 crit.pos <- 0.4
@@ -126,7 +130,7 @@ FN <- pls_confusion_matrix_36[2,1]
 
 FP <- pls_confusion_matrix_36[1,2]
 
-pls_confusion_matrix_36
+#pls_confusion_matrix_36
 
 # Calcul des parametres pls de la matrice de confusion
 
@@ -138,8 +142,8 @@ Sensitivity_pls36 <- ((TP / (TP+FN)*100))
 
 Parametre_pls_36 <- rbind(Accuracy_pls36,Precision_pls36,Sensitivity_pls36)
 
-pls_pred_arbres_36$Vrai = "FAUX"
-pls_pred_arbres_36$Vrai[pls_pred_arbres_36$code_ech_arbre %in% trueP$seuil.36] = "VRAI"
+pls_pred_arbres_36$Pred.correct = "FAUX"
+pls_pred_arbres_36$Pred.correct[pls_pred_arbres_36$code_ech_arbre %in% trueP$seuil.36] = "VRAI"
 
 #save(pls_confusion_matrix_36,Accuracy_pls36,Precision_pls36,Sensitivity_pls36,pls_pred_arbres_36,Parametre_pls_36,  file = "Sauvegardes_objet_R.data/Pred_pls/parameter_pls_ct36.Rdata")
 
@@ -156,8 +160,8 @@ Confusion_matrix
 
 pls_pred <- ggplot(pls_pred_arbres_36)+
   aes(y = pls_pred_36 , x = code_ech_arbre, color = statut_pred) +
-  geom_rect(aes(xmin = "A1", xmax = "T+", ymin = crit.neg, ymax = crit.pos), lwd = 1 , fill = "gray50", color = "gray50") +
-  geom_point(aes(shape = Vrai, size = Vrai), fill ="blue") + 
+  geom_rect(aes(xmin = "A1", xmax = "T7", ymin = crit.neg, ymax = crit.pos), lwd = 1 , fill = "gray50", color = "gray50") +
+  geom_point(aes(shape = Pred.correct, size = Pred.correct), fill ="blue") + 
   scale_size_manual(values =c(2.1,2.9))+
   scale_shape_manual(values =c(4,21))+
   geom_segment(aes(xend = code_ech_arbre, y = 0, yend = pls_pred_36)) +
@@ -166,8 +170,14 @@ pls_pred <- ggplot(pls_pred_arbres_36)+
 
 pls_pred
 
+pls_confusion_matrix_36
+
+Parametre_pls_36
+
+T2 <- Sys.time()
+
+difftime(T2,T1)
+
 #ggsave("Graphiques/Graph_pls/Prediction_pls_Global_ct36.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)
 
-#save(All_parametre_36,All_Confusion_matrix_36 , file = "Sauvegardes_objet_R.data/All_parametre_36.Rdata")
 
-# write.table(x = All_Confusion_matrix_36  , file = "Donnees/All_Confusion_matrix_36 .csv" , sep = ';')

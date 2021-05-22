@@ -21,6 +21,7 @@ SPIR_Po <- read.table(file = "Donnees/Data_SPIR_Edouard/SPIR_Pothin_var.csv"
 code_labo <- rownames(SPIR_Po)
 
 names(SPIR_Po) [1] = c("code_variete")
+names(SPIR_Po) [2] = c("code_agri")
 SPIR_Po$code_nbr_rep <- factor(substr(code_labo, 8, 8))
 SPIR_Po$code_ech_arbre <- factor(substr(code_labo, 1, 2))
 SPIR_Po$code_ech_feuille <- factor(substr(code_labo, 1, 3))
@@ -75,7 +76,7 @@ data_long_Po <- data_long_Po[ !is.na(data_long_Po$reflectance),]
 
 # Sauvegarde des donnees Hoarau en Rdata ####
 
-save(data_long_Po, SPIR_Po, truep_Po,  file = "Sauvegardes_objet_R.data/SPIR_Po.Rdata")
+save(data_long_Po, SPIR_Po, truep_Po,  file = "Sauvegardes_objet_R.data/Jeux de donnee/SPIR_Po.Rdata")
 
 # Exploration du jeu de donnees     ####
 

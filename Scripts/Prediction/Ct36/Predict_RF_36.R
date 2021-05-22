@@ -47,7 +47,7 @@ maliste <- lapply(Tirage,function(feuille){
 
 test_ed <- do.call(rbind, maliste) # on colle toute les listes créées précédement 
 
-decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.5) # on decoupe le jeu de donné en training set et test set
+decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.75) # on decoupe le jeu de donné en training set et test set
 train_rf <- test_ed[decoup,]
 test_rf <- test_ed[!decoup,] 
 
@@ -74,7 +74,7 @@ model_rf_36 <- randomForest(
 print(model_rf_36)
 plot(model_rf_36)
 
-rf_pred <- test_rf
+rf_pred <- test_rf  # Prediction sur le jeu de donne test qui a le meme level pour code arbre et predi donc sur tout les abres
 
 # Prediction sur les feuilles de la base d'apprentissage
 
@@ -131,7 +131,7 @@ FN <- rf_confusion_matrix_36[2,1]
 
 FP <- rf_confusion_matrix_36[1,2]
 
-rf_confusion_matrix_36
+#rf_confusion_matrix_36
 
 # Calcul des parametres rf de la matrice de confusion
 
@@ -142,6 +142,8 @@ Precision_rf36 <- ((TP / (TP+FP)*100))
 Sensitivity_rf36 <- ((TP / (TP+FN)*100))
 
 Parametre_rf_36 <- rbind(Accuracy_rf36,Precision_rf36,Sensitivity_rf36)
+
+names(Parametre_rf_36) <- c("Accuracy","Precision","Sensitivity")
 
 rf_pred_arbres_36$Vrai = "FAUX"
 rf_pred_arbres_36$Vrai[rf_pred_arbres_36$code_ech_arbre %in% trueP$seuil.36] = "VRAI"
@@ -161,14 +163,18 @@ Confusion_matrix
 
 rf_pred <- ggplot(rf_pred_arbres_36)+
   aes(y = rf_pred_36 , x = code_ech_arbre, color = statut_pred) +
-  geom_rect(aes(xmin = "A1", xmax = "T+", ymin = crit.neg, ymax = crit.pos), lwd = 1 , fill = "gray50", color = "gray50") +
+  geom_rect(aes(xmin = "A1", xmax = "T7", ymin = crit.neg, ymax = crit.pos), lwd = 1 , fill = "gray50", color = "gray50") +
   geom_point(aes(shape = Vrai, size = Vrai), fill ="blue") + 
   scale_size_manual(values =c(2.1,2.9))+
   scale_shape_manual(values =c(4,21))+
   geom_segment(aes(xend = code_ech_arbre, y = 0, yend = rf_pred_36)) +
   scale_color_manual(values = c(Négatif = "red", Indéterminé = "gray20", Positif = "green")) +
-  labs(x = "Code de l'arbre", y = "Résultat moyen des feuilles entre 0 et 1", title = "Prédiction svm rf Global a ct36  " ,subtitle = "T = positif au HLB à Ct36 en qPCR", color = "Statut") +dark_theme_gray()
+  labs(x = "Code de l'arbre", y = "Résultat moyen des feuilles entre 0 et 1", title = "Prédiction rf Global a ct36" ,subtitle = "T = positif au HLB à Ct36 en qPCR", color = "Statut") +dark_theme_gray()
 
 rf_pred
 
-#ggsave("Graphiques/Graph_RF/Prediction_rf_Global_ct36.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)
+rf_confusion_matrix_36
+
+Parametre_rf_36
+
+ggsave("Graphiques/Graph_RF/Prediction_rf_Global_ct36.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)

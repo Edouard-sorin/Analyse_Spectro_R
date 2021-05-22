@@ -16,11 +16,18 @@ library(ggdark)
 load("Sauvegardes_objet_R.data/Jeux de donnee/data_SPIR_Ed.Rdata")
 
 
-# Discriminabilite du statut HLB  via l'anova ####
 
-data_long.lambda <- split(data_long_Ed, data_long_Ed$lambda)
+# Discriminabilite des agriculteurs via l'anova ####
 
-model.lm <- lapply(data_long.lambda, function(x) lm(reflectance ~ qPCR_36 ,data = x))
+# masque logique pour ne prendre que les arbres postitif a CT36 
+
+data_long_agri <- data_long_Ed
+masque_qPCR <- data_long_agri$qPCR_36 == 0
+data_long_agri <- data_long_agri[masque_qPCR,]
+
+data_long.lambda <- split(data_long_agri, data_long_agri$lambda)
+
+model.lm <- lapply(data_long.lambda, function(x) lm(reflectance ~ code_agri ,data = x))
 
 model.anov<-lapply(model.lm, function(x) anova(x))
 
@@ -40,7 +47,6 @@ colnames(Anov_Discrim) <- c("F_value","P_value")
 
 Anov_Discrim $lambda <- as.numeric(350:2500)
 
-
 ## Graphique de présentation ####
 
 graph_discrim <- ggplot(Anov_Discrim) +
@@ -57,13 +63,13 @@ graph_discrim <- ggplot(Anov_Discrim) +
   
   theme(panel.grid.major.y = element_line(colour = "grey20")) +
   
-annotate(geom = "text", x = Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))], y = 9+Anov_Discrim$F_value[(which.max(Anov_Discrim$F_value))], label = Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))], size = 4, colour = "red")+
+  annotate(geom = "text", x = Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))], y = 9+Anov_Discrim$F_value[(which.max(Anov_Discrim$F_value))], label = Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))], size = 4, colour = "red")+
   
   geom_point(aes(x = Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))], y = 2+Anov_Discrim$F_value[(which.max(Anov_Discrim$F_value))] ), shape = 124, fill="darkred" ,color = "red" , size = 2) 
-  
+
 graph_discrim
 
-#ggsave("Graphiques/Graph_explo_donnees/ Discriminabilite des variete positives à qPCR_36 via l'anova.pdf", units = "cm", width = 20, height = 15, scale = 2)
+ggsave("Graphiques/Graph_explo_donnees/ Discriminabilite des agriculteurs négatif à qPCR_36 via l'anova.pdf", units = "cm", width = 20, height = 15, scale = 2)
 
 ## graphP_value ####
 
@@ -84,9 +90,9 @@ graph_Pvalue<- ggplot(Anov_Discrim) +
   annotate(geom = "text", x = Anov_Discrim$lambda[(which.max(Anov_Discrim$P_value))], y = 0.02+ Anov_Discrim$P_value[(which.max(Anov_Discrim$P_value))], label = Anov_Discrim$lambda[(which.max(Anov_Discrim$P_value))], size = 4, colour = "red")+
   
   geom_point(aes(x = Anov_Discrim$lambda[(which.max(Anov_Discrim$P_value))], y = 0.002+Anov_Discrim$P_value[(which.max(Anov_Discrim$P_value))] ), shape = 124, fill="darkred" ,color = "red" , size = 2) 
-  
-  
-  graph_Pvalue
+
+
+graph_Pvalue
 
 
 
@@ -95,72 +101,50 @@ graph_Pvalue<- ggplot(Anov_Discrim) +
 summary(Anov_Discrim)
 
 a <- Anov_Discrim$lambda[(which.max(Anov_Discrim$F_value))] # Valeur maximal du F_value
-a <-  which(Anov_Discrim$lambda == 703)  # longueur d'onde à chercher
+a <-  which(Anov_Discrim$lambda == 804)  # longueur d'onde à chercher
 a <- Anov_Discrim$lambda[(which.min(Anov_Discrim$F_value))]
 
 plot(model.lm[[a]])
 res<- residuals(model.lm[[a]])
 hist(res)
 
-# Discriminabilite du statut HLB via Random Forest ####
+## Representation graphique des  avec ggparty ####
 
-seuil.ct = 36
-
-RF_ct <- data_SPIR_Ed
-masque_numeric <- sapply(RF_ct, is.numeric)
-RF_ct <- RF_ct[,masque_numeric]
-RF_ct[,paste0("qPCR_", seuil.ct)] <- data_SPIR_Ed[,paste0("qPCR_", seuil.ct)] 
-
-gtree_glob <- ctree( qPCR_36 ~ . , data=RF_ct)
-
-# plot 
-
-pdf("Graphiques/Graph_RF/Arbre de decision a ct36.pdf",  width = 30, height = 15)
-
-plot(gtree_glob ,)
-
-#on ferme le graphique
-
-dev.off()
-
-print(gtree_glob)
-
-## Representation graphique du statut HLB avec ggparty ####
-
-#load("Sauvegardes_objet_R.data/Jeux de donnee/SPIR_Ba.Rdata")
+# Changer le nom des colonnes de X350 a 350nm
 
 T1 <- Sys.time()
 
-seuil.ct = 36
+data_SPIR_agri <- data_SPIR_Ed
+masque_qPCR <- data_SPIR_agri$qPCR_36 == 0
+data_SPIR_agri <- data_SPIR_agri[masque_qPCR,]
 
-RF_ct <- data_SPIR_Ed[,1:958]
+RF_ct <- data_SPIR_agri
 RF_ct <- round(RF_ct[, grep("^X", names(RF_ct))],3)
 masque_numeric <- sapply(RF_ct, is.numeric)
 RF_ct <- RF_ct[,masque_numeric]
-RF_ct[,paste0("qPCR_", seuil.ct)] <- data_SPIR_Ed[,paste0("qPCR_", seuil.ct)] 
+RF_ct$code_agriculteurs <- data_SPIR_agri[,(which(colnames(data_SPIR_agri) == "code_agri" ))]
 
-gtree_glob <- ctree( qPCR_36 ~ . , data=RF_ct)
+gtree_agri <- ctree( code_agriculteurs ~ . , data=RF_ct)
 
 
 #autoplot(gtree_glob)
 
-is.ggplot(ggparty(gtree_glob)) # Pour savoir si le package party rend en compte le randomForest 
+is.ggplot(ggparty(gtree_agri)) # Pour savoir si le package party rend en compte le randomForest 
 
 # ,layout = data.frame(id = c(4, 5, 8, 10),x = c(0.35, 0.15, 0.7, 0.8), y = c(0.95, 0.6, 0.8, 0.55)))
 
 
+pdf("Graphiques/Graph_RF/Arbre de decision par agriculteurs.pdf",  width = 30, height = 15)
 
-pdf("Graphiques/Graph_RF/Arbre de decision a ct36 avec lambda 350nm à 1300nm.pdf",  width = 30, height = 15)
 
-rf.ct <- ggparty(gtree_glob, terminal_space = 0.2 ) +  # terminal_space =  taille aloué aux plots (terminal)
+rf.agri <- ggparty(gtree_agri, terminal_space = 0.2 ) +  # terminal_space =  taille aloué aux plots (terminal)
   
-geom_edge(colour = "grey77", size = 0.5) + # mettre reflectance
+  geom_edge(colour = "grey77", size = 0.5 ,  ) +
   
- geom_edge_label(colour = c("black") , size = 4 , alpha = 0.1) +
   
- # geom_edge_label(colour = c("300", "600", "633", "600" ,"633", "900", "999" ,"063" ,"066", "78", "79" ,"80", "81" ,"182", "83", "84", "85", "86", "87" ,"88", "89" ,"90", "91", "92" ,"93", "94", "95", "96" ,"97", "98", "99") , size = 4 , alpha = 0.1) +
+  geom_edge_label(colour = "Black", size = 4, alpha = 0.1) +
   
-  geom_node_label(# map color of complete label to splitvar
+  geom_node_label(# map color of complete label to splitagri
     mapping = aes(),
     # map content to label for each line
     line_list = list(aes(label = splitvar),
@@ -188,24 +172,22 @@ geom_edge(colour = "grey77", size = 0.5) + # mettre reflectance
                   ids = "terminal",
                   size = 2.7,
                   nudge_y = 0.013)+
-
-  geom_node_plot(gglist = list(geom_bar(aes(x = "" , fill = qPCR_36),
+  
+  geom_node_plot(gglist = list(geom_bar(aes(x = "" , fill = code_agriculteurs),
                                         position = position_fill(),
                                         alpha = 0.8),
                                theme_classic(base_size = 10) ,
                                scale_fill_brewer(palette = "Dark2"),xlab("")),
-                 shared_axis_labels = TRUE, # Met 1 legende pour tous les plots
-                 legend_separator = TRUE, # trait entre la legende et les plots
+                 shared_axis_labels = TRUE,
+                 legend_separator = TRUE,
                  size = 1.2,
                  height = 1) +
   
-  theme_void() +
-  
   #scale_color_brewer(palette = "Spectral) +
+  
+  labs(title = "    Arbre de decision sur la reflectance des données global par rapport au différentes parcelles négatives à ct36", subtitle = "      formule : code_agri ~ reflectance | taux d'erreu out of bag = 25 % ") 
 
-labs(title = "    Arbre de decision sur la reflectance des données global par rapport au statut HLB", subtitle = "     Arbre positif à Ct<36 | formule : qPCR36 ~ reflectance | taux d'erreu out of bag = 25 % | lambda 350nm à 1300nm ") 
-    
-rf.ct
+rf.agri
 
 
 dev.off()
@@ -217,20 +199,61 @@ T2 <- Sys.time()
 difftime(T2,T1)
 
 
-#ggsave("Graphiques/Graph_RF/Arbre de decision sur le jeu de donnée global a ct36 (party).pdf",plot = last_plot(), units = "cm", width = 50, height = 10, scale = 2)
 
-# palette de couleur du package pals :
 
-pal.bands(coolwarm, parula, ocean.haline, brewer.blues, cubicl, kovesi.rainbow, ocean.phase,alphabet, alphabet2, glasbey, kelly, polychrome, stepped, stepped2, stepped3, tol, watlington, stepped, main="Colormap suggestions")
+## graph moyennés à CT agri tout spectres ####
 
-# plus d'info sur https://cran.r-project.org/web/packages/pals/vignettes/pals_examples.html
+T1 <- Sys.time()
 
-# Plus d'info sur ggparty : https://cran.r-project.org/web/packages/ggparty/vignettes/ggparty-graphic-partying.html
+data_long_agri <- data_long_Ed
 
-#https://github.com/kwstat/pals/issues/3
+g0 <- ggplot(data_long_agri) +
+  aes(x = lambda, y = reflectance, group = code_agri, color = code_agri ) +
+  stat_summary(fun = mean, geom = "line" , size = 0.5) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Longueur d'onde (en nm)", y = "Réflectance moyenne", title = "Spectre moyen en fonction de la agriiété ", subtitle = "arbre positif à Ct<36)", color = "Résultat du test HLB à Ct<agri") +
+  dark_theme_gray() +
+  theme(legend.position = "right")
+#theme_gray()
 
-ggplot(mtcars) + 
-  geom_bar(aes(x=factor(hp), fill=factor(hp))) +
-  scale_fill_manual(values=as.vector(polychrome(26)))
+g0
 
+## graph moyennés à CT agri zoomé sur les spectres 400 à 680 nm ####
+
+g1 <- ggplot(data_long_agri[data_long_agri$lambda >= 400 & data_long_agri$lambda <= 680,] ) +
+  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = code_agri )+
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
+  scale_color_brewer(palette = "Set1")+
+  labs(x = "Longueur d'onde (en nm)", y = "Réflectance moyenne", title = "Spectre moyen de 400 à 680 nm en fonction de la agriiété ")+
+  #, subtitle = "arbre positif à Ct<36)", color = "Résultat du test HLB à Ct<agri") +
+  dark_theme_gray() +
+  theme(legend.position = "none")
+#theme_gray()
+g1
+
+## graph moyennés à CT agri zoomé sur les spectres 700 à 1400 nm ####
+
+g2 <- ggplot(data_long_agri[data_long_agri$lambda >= 700 & data_long_agri$lambda <= 1400,] ) +
+  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = code_agri )+
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = "Longueur d'onde (en nm)", y = "Réflectance moyenne", title = "Spectre moyen de 700 à 1400 nm en fonction de la agriiété ")+
+  #, subtitle = "arbre positif à Ct<36)", color = "Résultat du test HLB à Ct<agri") +
+  dark_theme_gray() +
+  theme(legend.position = "none")
+#theme_gray()
+g2
+
+
+
+
+g_agri <- ggarrange( g1, g2,g0, ncol = 3)
+
+T2 <- Sys.time()
+
+difftime(T2,T1)
+
+g_agri
+
+#ggsave("Graphiques/Graph_explo_donnees/Spectres_moyen_des feuilles pour chaque parcelle sur l'ensemble des arbres.pdf",plot = g_agri, units = "cm", width = 20, height = 15, scale = 2)
 

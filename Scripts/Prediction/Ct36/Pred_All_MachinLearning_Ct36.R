@@ -20,7 +20,7 @@ load("Sauvegardes_objet_R.data/Jeux de donnee/data_SPIR_Ed.Rdata")
 
 # Parametres MachinLearning Ct<36 ####
 
-nb.simu <- 10  # Minimu 1000 simu
+nb.simu <- 100  # Minimu 1000 simu
 rep.max <- 6  # nombre de repetition SPIR sur les feuilles , maximum 6
 
 #Time difference of 18.0745 mins pour 10 simu a 6 rep
@@ -65,3 +65,8 @@ names(ML.36)[2] <- "Moyenne"
 
 ML.36$et <- aggregate(valeurs ~ critere, ML_global.36, sd)$valeurs
 ML.36
+
+
+save(ML.36, file = "Sauvegardes_objet_R.data/All_Pred/All_parametre_36.Rdata")
+
+write.table(x = ML.36 , file = "Donnees/All_Confusion_matrix_36 .csv" , sep = ';')

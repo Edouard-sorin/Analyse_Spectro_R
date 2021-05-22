@@ -4,6 +4,7 @@ rm(list=ls())  # nettoyage des listes de l'environnement de travail
 library(tidyr) # pivot longer & pivot_wider
 
 library(ggplot2) #ggplot pour graphiques
+library(ggdark) # graphique noir
 library(ggpubr) # pour la fonction ggarrange qui permet de coller 2 graphiques
 
 # Importation des donnees SPIR Global ####
@@ -22,6 +23,7 @@ data_SPIR_Ed <- read.table(file = "Donnees/Data_SPIR_Edouard/SPIR_Global.csv"
 code_labo <- rownames(data_SPIR_Ed)
 
 names(data_SPIR_Ed) [1] = c("code_variete")
+names(data_SPIR_Ed) [2] = c("code_agri")
 data_SPIR_Ed$code_nbr_rep <- factor(substr(code_labo, 8, 8))
 data_SPIR_Ed$code_ech_arbre <- factor(substr(code_labo, 1, 2))
 data_SPIR_Ed$code_ech_feuille <- factor(substr(code_labo, 1, 3))
@@ -43,7 +45,7 @@ data_Qpcr_Ed <- read.table(file = "Donnees/Resultats_qPCR_Ed/qPCR_global_Ed.csv"
                            , na.strings = c("","NA")
                            , dec = "," )
 
-# on stocke les noms d'échantillons positifs selon nos 2 seuils de Ct (cycle de qPCR ), a savoir moins de 32 cyclces et moins de 36 cycles qPCR
+# on stocke les noms d'echantillons positifs selon nos 2 seuils de Ct (cycle de qPCR ), a savoir moins de 32 cyclces et moins de 36 cycles qPCR
 seuils <- c(32, 36)
 
 trueP <- lapply(seuils, function(x) unique(data_Qpcr_Ed$Sample.Name[ which(data_Qpcr_Ed$C..Mean < x & data_Qpcr_Ed$C..SD < 1) ]))
@@ -60,6 +62,7 @@ rm (data_Qpcr_Ed,select.lambda,seuils)
 
 data_SPIR_Ed[c("qPCR_32", "qPCR_36")] <- lapply(data_SPIR_Ed[c("qPCR_32", "qPCR_36")], factor)
 
+#save(trueP,  file = "Sauvegardes_objet_R.data/Jeux de donnee/trueP.Rdata")
 
 # Format_long ####
 
@@ -76,13 +79,13 @@ data_long_Ed <- data_long_Ed[ !is.na(data_long_Ed$reflectance),]
 
 # Sauvegarde des donnees en Rdata ####
 
-save(data_long_Ed, data_SPIR_Ed, trueP,  file = "Sauvegardes_objet_R.data/data_SPIR_Ed.Rdata")
+#save(data_long_Ed, data_SPIR_Ed, trueP,  file = "Sauvegardes_objet_R.data/Jeux de donnee/data_SPIR_Ed.Rdata")
 
 # Exploration du jeu de donnees     ####
 
-length(levels(data_SPIR_Ed$code_ech_arbre)) # correspondant à 2x HLB 3x lot et 7x arbres soit 42
+length(levels(data_SPIR_Ed$code_ech_arbre)) # correspondant a 2x HLB 3x lot et 7x arbres soit 42
 
-ftable (code_nbr_rep ~ code_ech_arbre , data = data_SPIR_Ed) # repartition global pour voir les erreur de prise de données
+ftable (code_nbr_rep ~ code_ech_arbre , data = data_SPIR_Ed) # repartition global pour voir les erreur de prise de donnees
 
 ftable ( qPCR_32 ~ code_ech_arbre, data = data_SPIR_Ed) 
 
@@ -113,45 +116,128 @@ Total_all_Var <- rbind(totalt_Citron_0,totalt_Citron_1,totalt_Tangor_0,totalt_Ta
 Total_all_Var
 
 # graphiques d'exploration ####
-## graph moyennés à CT 32 tout spectres ####
+## graph moyennes a CT 32 tout spectres ####
 
-ggplot(data_long_Ed) +
+
+T1 <- Sys.time()
+
+g0 <- ggplot(data_long_Ed) +
   aes(x = lambda, y = reflectance, group = qPCR_32, color = qPCR_32 ) +
-  stat_summary(fun = mean, geom = "line") +
-  scale_color_brewer(palette = "Dark2", labels = c("Négatif","Positif")) +
-  labs(x = "Longueur d'onde (en nm)", y = "Réflectance moyenne", title = "Spectre moyen en fonction du statut HLB des arbres ", subtitle = "arbre positif à Ct<32)", color = "Résultat du test HLB à Ct<32") +
-  #dark_theme_gray() 
-  theme_gray()
+  stat_summary(fun = mean, geom = "line" , size = 0.5) +
+  #scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4"))
+  scale_color_brewer(palette = "Dark2", labels = c("Negatif","Positif")) +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen en fonction du statut HLB des arbres ", subtitle = "arbre positif a Ct<32)", color = "Resultat du test HLB a Ct<32") +
+  dark_theme_gray() +
+  theme(legend.position = "bottom")
+  #theme_gray()
 
-## graph moyennés à CT 32 zoomé sur les spectres 400 à 680 nm ####
+g0
 
-ggplot(data_long_Ed[data_long_Ed$lambda >= 400 & data_long_Ed$lambda <= 680,] ) +
+## graph moyennes a CT 32 zoome sur les spectres 400 a 680 nm ####
+
+g1 <- ggplot(data_long_Ed[data_long_Ed$lambda >= 400 & data_long_Ed$lambda <= 680,] ) +
   aes(x = lambda, y = reflectance, group = code_ech_arbre, color = qPCR_32 )+
-  # geom_line() +
-  stat_summary(fun = mean, geom = "line") +
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
   scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4")) +
-  theme_gray()
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen de 400 a 680 nm en fonction du statut HLB des arbres ") +
+  # , subtitle = "arbre positif a Ct<32", color = "Resultat du test HLB a Ct<32"
+  dark_theme_gray()  +
+  theme(legend.position = "none")
+  #theme_gray()
+g1
 
-## graph moyennés à CT 36 tout spectres ####
+## graph moyennes a CT 32 zoome sur les spectres 700 a 1400 nm ####
 
-ggplot(data_long_Ed) +
+g2 <- ggplot(data_long_Ed[data_long_Ed$lambda >= 700 & data_long_Ed$lambda <= 1400,] ) +
+  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = qPCR_32 )+
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
+  scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4")) +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen de 700 a 1400 nm en fonction du statut HLB des arbres ") +
+  #, subtitle = "arbre positif a Ct<32", color = "Resultat du test HLB a Ct<32"
+  dark_theme_gray()  +
+  theme(legend.position = "none")
+#theme_gray()
+g2
+
+#ggsave("Graphiques/Graph_explo_donnees/Spectres_moyen_de 700 a 1400 nm_ct32.pdf",plot = g2, units = "cm", width = 30, height = 20, scale = 2)
+
+
+g_32 <- ggarrange( g1, g2,g0, ncol = 3)
+
+T2 <- Sys.time()
+
+TG1 <- difftime(T2,T1)
+TG1
+
+## graph moyennes a CT 36 tout spectres ####
+
+T1 <- Sys.time()
+
+g3 <- ggplot(data_long_Ed) +
   aes(x = lambda, y = reflectance, group = qPCR_36, color = factor(qPCR_36) ) +
-  stat_summary(fun = mean, geom = "line") +
-  scale_color_brewer(palette = "Dark2") +
-  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen en fonction du statut HLB des arbres ", subtitle = "arbre positif à Ct<36)", color = "Resultat du test HLB à Ct<36") +
-  #dark_theme_gray() 
-  theme_gray()
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
+  #scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4")) 
+  scale_color_brewer(palette = "Dark2", labels = c("Negatif","Positif")) +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen en fonction du statut HLB des arbres ", subtitle = "arbre positif a Ct<36", color = "Resultat du test HLB a Ct<36") +
+  dark_theme_gray() +
+    theme(legend.position = "bottom")
+  #theme_gray()
+g3
 
-# graph moyennés à CT 36 zoomé sur les spectres 400 à 680 nm #####
 
-ggplot(data_long_Ed[data_long_Ed$lambda >= 400 & data_long_Ed$lambda <= 680,] ) +
-  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = factor(qPCR_36) )+
-  # geom_line() +
-  stat_summary(fun = mean, geom = "line") +
+
+# graph moyennes a CT 36 zoome sur les spectres 400 a 680 nm #####
+
+g4 <- ggplot(data_long_Ed[data_long_Ed$lambda >= 400 & data_long_Ed$lambda <= 680,] ) +
+  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = qPCR_36 )+
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
   scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4")) +
-  theme_gray()
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen de 400 a 680 nm en fonction du statut HLB des arbres " )+
+  dark_theme_gray() +
+theme(legend.position = "none")
+  #theme_gray()
+g4
 
-# multiple graph feuilles moyennés à CT 32 ####
+
+
+
+
+## graph moyennes a CT 36 zoome sur les spectres 700 a 1400 nm  ####
+
+g5 <- ggplot(data_long_Ed[data_long_Ed$lambda >= 700 & data_long_Ed$lambda <= 1400,] ) +
+  aes(x = lambda, y = reflectance, group = code_ech_arbre, color = qPCR_36 )+
+  stat_summary(fun = mean, geom = "line", size = 0.5) +
+  scale_color_manual(values = c('0' = "darkgreen", '1' = "brown4")) +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectre moyen de 700 a 1400 nm en fonction du statut HLB des arbres ") +
+  #, subtitle = "arbre positif a Ct<36)", color = "Resultat du test HLB a Ct<36"
+  dark_theme_gray()  +
+  theme(legend.position = "none")
+#theme_gray()
+g5
+
+
+g_36 <- ggarrange( g4, g5,g3, ncol = 3)
+ 
+T2 <- Sys.time()
+
+TG2 <- difftime(T2,T1)
+TG2
+
+T1 <- Sys.time()
+
+g_glob <- ggarrange(g_32, g_36, nrow = 2)
+
+T2 <- Sys.time()
+
+TG3 <- difftime(T2,T1)
+TG3
+
+
+
+ggsave("Graphiques/Graph_explo_donnees/Spectres_moyen_feuille_ct32&ct36.pdf",plot = g_glob, units = "cm", width = 30, height = 20, scale = 2)
+
+
+# multiple graph feuilles moyennes a CT 32 ####
 
 p1 <- ggplot(data_long_Ed[data_long_Ed$qPCR_36 == 1,]) +
   aes(x = lambda, y = reflectance, color = code_variete , group = code_ech_feuille) +
@@ -159,7 +245,7 @@ p1 <- ggplot(data_long_Ed[data_long_Ed$qPCR_36 == 1,]) +
   scale_y_continuous(limits = c(0,1.2)) +
   #scale_color_brewer(palette = "Dark2") +
   facet_wrap(vars(code_ech_arbre)) +
-  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectres moyen des feuilles par arbres et par variété", subtitle = "arbre positif à Ct<36)", color = "Variété") +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectres moyen des feuilles par arbres et par variete", subtitle = "arbre positif a Ct<36)", color = "Variete") +
   #dark_theme_gray() 
   theme_gray()
 
@@ -171,7 +257,7 @@ p0 <- ggplot(data_long_Ed[data_long_Ed$qPCR_36 == 0,]) +
   scale_y_continuous(limits = c(0,1.2)) +
   #scale_color_brewer(palette = "Dark2") +
   facet_wrap(vars(code_ech_arbre)) +
-  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectres moyen des feuilles par arbres et par variété", subtitle = "arbre négatif à Ct<36)") +
+  labs(x = "Longueur d'onde (en nm)", y = "Reflectance moyenne", title = "Spectres moyen des feuilles par arbres et par variete", subtitle = "arbre negatif a Ct<36)") +
   #dark_theme_gray() 
   theme_gray()
 

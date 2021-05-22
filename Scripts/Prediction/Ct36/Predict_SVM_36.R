@@ -38,12 +38,12 @@ maliste <- lapply(Tirage,function(feuille){
 
 test_ed <- do.call(rbind, maliste) # on colle toute les listes créées précédement 
 
-test_ed <- test_ed[-(which(colnames(test_ed) == "qPCR_36"))]
+test_ed <- test_ed[-(which(colnames(test_ed) == "qPCR_32"))]
 
 test_ed[[paste0("qPCR_", seuil.ct)]] <- as.numeric(as.character(test_ed[[paste0("qPCR_", seuil.ct)]] ))
 
 
-decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.5) # on decoupe le jeu de donné en training set et test set
+decoup <- sample.split(test_ed[,paste0("qPCR_", seuil.ct)], SplitRatio = 0.75) # on decoupe le jeu de donné en training set et test set
 train_svm <- test_ed[decoup,]
 test_svm <- test_ed[!decoup,] 
 
@@ -120,7 +120,7 @@ FN <- svm_confusion_matrix_36[2,1]
 
 FP <- svm_confusion_matrix_36[1,2]
 
-svm_confusion_matrix_36
+#svm_confusion_matrix_36
 
 # Calcul des parametres svm de la matrice de confusion
 
@@ -160,5 +160,9 @@ svm_pred <- ggplot(svm_pred_arbres_36)+
   labs(x = "Code de l'arbre", y = "Résultat moyen des feuilles entre 0 et 1", title = "Prédiction svm svm Global a ct36  " ,subtitle = "T = positif au HLB à Ct36 en qPCR", color = "Statut") +dark_theme_gray()
 
 svm_pred
+
+svm_confusion_matrix_36
+
+Parametre_svm_36
 
 #ggsave("Graphiques/Graph_pred_SVM-ct36/Prediction_SVM_Global_ct36.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)

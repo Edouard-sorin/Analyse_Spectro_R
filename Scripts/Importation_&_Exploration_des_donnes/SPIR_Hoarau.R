@@ -21,6 +21,7 @@ SPIR_Ho <- read.table(file = "Donnees/Data_SPIR_Edouard/SPIR_Hoarau_var.csv"
 code_labo <- rownames(SPIR_Ho)
 
 names(SPIR_Ho) [1] = c("code_variete")
+names(SPIR_Ho) [2] = c("code_agri")
 SPIR_Ho$code_nbr_rep <- factor(substr(code_labo, 8, 8))
 SPIR_Ho$code_ech_arbre <- factor(substr(code_labo, 1, 2))
 SPIR_Ho$code_ech_feuille <- factor(substr(code_labo, 1, 3))
@@ -75,7 +76,7 @@ data_long_Ho <- data_long_Ho[ !is.na(data_long_Ho$reflectance),]
 
 # Sauvegarde des donnees Hoarau en Rdata ####
 
-save(data_long_Ho, SPIR_Ho, truep_Ho,  file = "Sauvegardes_objet_R.data/SPIR_Ho.Rdata")
+save(data_long_Ho, SPIR_Ho, truep_Ho,  file = "Sauvegardes_objet_R.data/Jeux de donnee/SPIR_Ho.Rdata")
 
 # Exploration du jeu de donnees     ####
 

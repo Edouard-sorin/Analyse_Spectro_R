@@ -60,8 +60,50 @@ rm(list=ls())
 #  note = {R package version 2.1.0 --- For new features, see the 'Changelog' file (in the package source)},
 #}
 
+# Fonction pour citer les packages de R
 
+citeR <- function(...)
+{
+  packages <- unlist(lapply(as.list(match.call()), deparse))[-1]
+  Rbibs <- ""
+  
+  for(package in packages)
+  {
+    Rbib <- capture.output(print(citation(package), bibtex = T))    
+    Rbib <- mapply(function(x, y) Rbib[x:y], 
+                   grep("  @.+[{]", Rbib), 
+                   which(Rbib == "  }"))
+    
+    if(class(Rbib) == "matrix"){
+      Rbib[1, 1] <- gsub(",", paste0(package, ","), Rbib[1, 1])
+      Rbib <- paste0(Rbib, collapse = "\n")
+    } else {
+      Rbib <- unlist(lapply(Rbib, function(x) {
+        x[1] <- gsub(",", paste0(package, ","), x[1]); 
+        x <- paste0(unlist(x), collapse = "\n")
+        return(x)
+      }))
+    }
+    
+    if(length(Rbib) > 1) {
+      if(any(grepl("@Manual", Rbib))) {
+        Rbib <- Rbib[grep("@Manual", Rbib)][1]
+      } else {
+        Rbib <- Rbib[1]}}
+    
+    Rbibs <- paste(Rbibs, Rbib, sep = "\n\n")
+  }
+  
+  writeBin(charToRaw(utf8::as_utf8(Rbibs)), "packages.bib")
+}
 
+# rentrer ensuite les packages utilisés :
+
+citeR(ggplot,ggparty,tidyr,pls,randomForest,e1071,snowfall)
+
+# Exemple
+
+[@ggplot2]
 
 # #Pour afficher titre mettre 4 # -> ####
 # #ou ctrl + shift + R dans "code, insert section
@@ -296,7 +338,7 @@ table(s)
 
 # pour push sur Github 
 
-# git remote add origin https://github.com/Edouard-sorin/Analyse_Spectro_R.git
+# git remote add origin https://github.com/Edouard-sorin/Analyse_Spectro_R.git  # Aller sur Github pour avoir l'adreese à envoyer
 # 
 # git branch -M master
 # 
@@ -304,6 +346,8 @@ table(s)
 
 # pas de modif sur github que sur Rstudio  ! 
 
+
+# pour le rapport:  git remote add origin https://github.com/Edouard-sorin/Rapport_Edouard_Sorin_2021.git 
 
 
 # Depuis Gitignore on peut signifier a git ce qu'on ne veut pas rendre sous cette notation :  Documents/
@@ -316,5 +360,15 @@ table(s)
 
 # Pour ne pas avoir de fichier "unstaged" dans la fenetre git en haut à droite il  faut ouvrir .gitignore dans les dossier ou se trouve le projet R et noté tel quel le nom des dossier de la fenetre git avec / à la fin
 
+# Pour modifier les output aller dans _output.ym pour dire les version de sorti
+
+# Pour réinitailiser un git, allez dans Tools/Project option/Git/Version de control (enlever et remttre pour réinitialiser et en suprimant le fichier git dans l'emplacement du dossier)
 
 
+
+
+## d) documents divers utiles ####
+
+# https://juba.github.io/tidyverse/index.html
+
+# https://bookdown.org/yihui/rmarkdown-cookbook/

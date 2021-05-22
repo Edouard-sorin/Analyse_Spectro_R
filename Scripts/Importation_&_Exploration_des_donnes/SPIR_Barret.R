@@ -21,6 +21,7 @@ SPIR_Ba <- read.table(file = "Donnees/Data_SPIR_Edouard/SPIR_Barret_var.csv"
 code_labo <- rownames(SPIR_Ba)
 
 names(SPIR_Ba) [1] = c("code_variete")
+names(SPIR_Ba) [2] = c("code_agri")
 SPIR_Ba$code_nbr_rep <- factor(substr(code_labo, 8, 8))
 SPIR_Ba$code_ech_arbre <- factor(substr(code_labo, 1, 2))
 SPIR_Ba$code_ech_feuille <- factor(substr(code_labo, 1, 3))

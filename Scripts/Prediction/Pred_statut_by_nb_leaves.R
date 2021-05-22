@@ -4,6 +4,8 @@ rm(list=ls())  # nettoyage des listes de l'environnement de travail
 
 library(e1071) # SVM
 
+library(pls) # PLS
+
 library(ggplot2) # Package ggplot pour graphiques
 library(ggdark) # Met un style de graphique ggplot en noir
 library(ggpubr)# Utilisation de la fonction ggarrange qui permet de coller 2 graphiques
@@ -16,8 +18,10 @@ library(snowfall) # Utilisation du calcul paralell pour optimiser la vitesse de 
 
 # Importation des fonctions utiles
 
-source(file = "Scripts/Prediction/Fct_Feuilles.R") 
+source(file = "Scripts/Prediction/Fct_Feuilles.R") # fonction feuille avec SVM
 
+
+#source(file = "Scripts/Prediction/Fct_Feuilles_PLS.R") #  fonction feuille avec PLS
 
 # Importation du jeu de donnee Global
 
@@ -25,7 +29,7 @@ load("Sauvegardes_objet_R.data/Jeux de donnee/data_SPIR_Ed.Rdata")
 
 # I) Parametres SVM Ct<36 ####
 
-nb.simu <- 1000  # Minimu 1000 simu  Time difference of 15.39098 hours pour 1000 simu
+nb.simu <- 100  # Minimu 1000 simu  Time difference of 15.39098 hours pour 1000 simu
 nb.feuille <- 10  # nombre de feuilles echantillonees par arbre , maximum 10
 seuil.ct <- 36
 
@@ -41,13 +45,14 @@ Tirage <- split(mean.arbre, mean.arbre$code_ech_arbre, drop = T) # drop = T pour
 sfInit(parallel = T, cpus = 4) # optimisation des processeurs sur les 4 coeurs
 sfLibrary(caTools)             # la library des packages utilisés
 sfLibrary(e1071)
+sfLibrary(pls)
 sfLibrary(caret)
 sfExport("fct_feuille","Tirage","nb.feuille","nb.simu") # les elements exterieur a la fonction
 T1 <- Sys.time() # information sur le temps que met l'operation a se realiser
 
 #res.svm.36 <- sfClusterApplySR(rep(1:rep.max, each = nb.simu), fct_svm , seuil.ct = 36 , list.feuilles= Tirage , restore = F, perUpdate = 6 ) # restore = T seulement si ça plante !
 
-res.svm.36 <- sfClusterApplyLB(rep(1:nb.feuille, each = nb.simu), fct_feuille , seuil.ct = 36 , list.arbres= Tirage ) # Le plus rapide # fct_svm on remplsis les 3 arguments qui sont : nb.rep, seuil.ct, list.feuilles
+res.svm.36 <- sfClusterApplyLB(rep(1:nb.feuille, each = nb.simu), fct_feuille, seuil.ct = 36 ,list.arbres= Tirage ) # Le plus rapide # fct_svm on remplsis les 3 arguments qui sont : nb.rep, seuil.ct, list.feuilles
 
 T2 <- Sys.time()
 
@@ -67,7 +72,7 @@ data_global.36 <- pivot_longer((intermed.36), cols = 1:3, names_to = "critere", 
 
 data_global.36$nb.rep <- rep(1:nb.feuille, each = (nb.simu*3))
 
-#save(res.svm.36,data_global.36,  file = "Sauvegardes_objet_R.data/SVM_ct36_6rep_100simu_3cpu_Sapply.Rdata")
+#save(res.svm.36,data_global.36,  file = "Sauvegardes_objet_R.data/Pred_nb_feuille_ct36_100_simu_19_04.Rdata")
 
 # save(list = ls(), file = "Sauvegardes_objet_R.data/SVM_ct36_6rep_10simu_para") 
 
@@ -87,8 +92,8 @@ ggplot(data = data_global.36) +
   theme(panel.grid.major.y = element_line(colour = "grey20"))
 
 
-#ggsave("Graphiques/Graph_param_SVM/Pred_nb_feuille_ct36_1000_simu.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)
+#ggsave("Graphiques/Graph_param_SVM/Pred_nb_feuille_ct36_100_simu_19_04.pdf",plot = last_plot(), units = "cm", width = 20, height = 15, scale = 2)
 
 #save(data_global.36, file = "Sauvegardes_objet_R.data/Pred_SVM/Param_SVM_nb_feuille_ct36_1000_simu")
 
-write.table(x = data_global.36  , file = "Donnees/Simu_SVM//Param_SVM_nb_feuille_ct36_1000_simu.csv" , sep = ';')
+#write.table(x = data_global.36  , file = "Donnees/Simu_SVM//Param_SVM_nb_feuille_ct36_1000_simu.csv" , sep = ';')
